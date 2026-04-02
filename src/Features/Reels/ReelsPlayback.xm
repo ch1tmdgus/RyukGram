@@ -52,13 +52,10 @@
 }
 %end
 
-// * Disable volume/mute button triggering unmutes
+// * Disable auto-unmuting reels
+// Blocks all paths that can unmute: hardware buttons, headphones,
+// mute switch, and the audio state announcer.
 %hook IGAudioStatusAnnouncer
-- (void)_muteSwitchStateChanged:(id)changed {
-    if (![SCIUtils getBoolPref:@"disable_auto_unmuting_reels"]) {
-        %orig(changed);
-    }
-}
 - (void)_didPressVolumeButton:(id)button {
     if (![SCIUtils getBoolPref:@"disable_auto_unmuting_reels"]) {
         %orig(button);
@@ -68,5 +65,19 @@
     if (![SCIUtils getBoolPref:@"disable_auto_unmuting_reels"]) {
         %orig(headphones);
     }
+}
+- (void)_muteSwitchStateChanged:(id)changed {
+    if (![SCIUtils getBoolPref:@"disable_auto_unmuting_reels"]) {
+        %orig(changed);
+    }
+}
+// Block the announcer from broadcasting "audio enabled" state changes
+- (void)_announceForDeviceStateChangesIfNeededForAudioEnabled:(BOOL)enabled reason:(NSInteger)reason {
+    // When pause/play mode is on, allow unmute (our force-unmute needs this path)
+    BOOL pausePlayMode = [[SCIUtils getStringPref:@"reels_tap_control"] isEqualToString:@"pause"];
+    if ([SCIUtils getBoolPref:@"disable_auto_unmuting_reels"] && enabled && !pausePlayMode) {
+        return;
+    }
+    %orig;
 }
 %end

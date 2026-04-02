@@ -395,6 +395,10 @@
 @property(nonatomic, copy, readwrite) NSArray *tools;
 @end
 
+// Swift classes: IGSundialPlaybackToggle.IGSundialPlaybackToggleView
+//                IGSundialClearMode.IGSundialClearedOverlayView
+// Hooked via %hook with mangled names — see EnhancedPlayback.xm
+
 @interface IGSundialViewerVerticalUFI : UIView
 - (void)_didTapLikeButton:(id)arg1;
 - (void)_didTapRepostButton:(id)arg1;
@@ -402,6 +406,9 @@
 
 @interface IGMainAppSurfaceIntent : NSObject
 - (id)tabStringFromSurfaceIntent;
+@end
+
+@interface IGSundialViewerVideoSectionController : NSObject
 @end
 
 @interface IGSundialFeedViewController : UIViewController
