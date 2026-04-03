@@ -36,3 +36,5 @@ src/**/wip.xm
 .claude
 CLAUDE.md
 upstream-scinsta
+*.ipa
+*.dylib
