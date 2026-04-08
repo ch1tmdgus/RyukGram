@@ -7,7 +7,7 @@
 #import <objc/runtime.h>
 #import "../../modules/JGProgressHUD/JGProgressHUD.h"
 
-// Settings backup/restore: export prefs as JSON file or QR, import from file
+// Settings backup/restore: export/import prefs as JSON file
 // or photo. Import resets known prefs to defaults then applies imported ones.
 
 #pragma mark - Preview view controller
@@ -45,7 +45,6 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
 
 @interface SCIBackupPreviewVC : UIViewController <UITableViewDataSource, UITableViewDelegate, UISearchResultsUpdating>
 @property (nonatomic, strong) NSMutableDictionary *mutableSettings;
-@property (nonatomic, strong, nullable) UIImage *qrImage;
 @property (nonatomic, copy) NSString *primaryActionTitle;
 @property (nonatomic, copy) void (^primaryAction)(SCIBackupPreviewVC *vc);
 
@@ -53,9 +52,11 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
 @property (nonatomic, strong) NSArray<SCIBackupPreviewGroup *> *visibleGroups;
 @property (nonatomic, copy) NSString *searchText;
 @property (nonatomic, strong) UITableView *tableView;
+@property (nonatomic, strong) UITextView *jsonTextView;
 @property (nonatomic, strong) UISearchController *searchController;
-@property (nonatomic, strong) UIBarButtonItem *editToggleItem;
+@property (nonatomic, strong) UIBarButtonItem *moreItem;
 @property (nonatomic) BOOL editMode;
+@property (nonatomic) BOOL jsonMode;
 @end
 
 @implementation SCIBackupPreviewVC
@@ -76,11 +77,13 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
                                                                target:self
                                                                action:@selector(runPrimary)]];
     }
-    self.editToggleItem = [[UIBarButtonItem alloc] initWithTitle:@"Edit"
-                                                            style:UIBarButtonItemStylePlain
-                                                           target:self
-                                                           action:@selector(toggleEditMode)];
-    [rightItems addObject:self.editToggleItem];
+    // Edit and JSON view live inside a single "More" menu so the title has room.
+    self.moreItem = [[UIBarButtonItem alloc]
+        initWithImage:[UIImage systemImageNamed:@"ellipsis.circle"]
+                style:UIBarButtonItemStylePlain
+               target:nil action:nil];
+    self.moreItem.menu = [self buildMoreMenu];
+    [rightItems addObject:self.moreItem];
     self.navigationItem.rightBarButtonItems = rightItems;
 
     UITableView *table = [[UITableView alloc] initWithFrame:self.view.bounds
@@ -94,28 +97,6 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
     table.estimatedSectionHeaderHeight = 44;
     [self.view addSubview:table];
     self.tableView = table;
-
-    if (self.qrImage) {
-        CGFloat headerHeight = 280;
-        UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, table.bounds.size.width, headerHeight)];
-        UIImageView *qr = [[UIImageView alloc] init];
-        qr.image = self.qrImage;
-        qr.contentMode = UIViewContentModeScaleAspectFit;
-        qr.layer.magnificationFilter = kCAFilterNearest;
-        qr.backgroundColor = [UIColor whiteColor];
-        qr.layer.cornerRadius = 12;
-        qr.layer.masksToBounds = YES;
-        qr.translatesAutoresizingMaskIntoConstraints = NO;
-        [header addSubview:qr];
-        [NSLayoutConstraint activateConstraints:@[
-            [qr.centerXAnchor constraintEqualToAnchor:header.centerXAnchor],
-            [qr.topAnchor constraintEqualToAnchor:header.topAnchor constant:20],
-            [qr.bottomAnchor constraintEqualToAnchor:header.bottomAnchor constant:-20],
-            [qr.widthAnchor constraintEqualToConstant:240],
-            [qr.heightAnchor constraintEqualToConstant:240],
-        ]];
-        table.tableHeaderView = header;
-    }
 
     UISearchController *sc = [[UISearchController alloc] initWithSearchResultsController:nil];
     sc.searchResultsUpdater = self;
@@ -211,11 +192,57 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
     self.mutableSettings[key] = @(sender.isOn);
 }
 
+- (UIMenu *)buildMoreMenu {
+    __weak typeof(self) weakSelf = self;
+    UIAction *editAction = [UIAction actionWithTitle:(self.editMode ? @"Done editing" : @"Edit values")
+                                                image:[UIImage systemImageNamed:(self.editMode ? @"checkmark" : @"pencil")]
+                                           identifier:nil
+                                              handler:^(__kindof UIAction *_) {
+        [weakSelf toggleEditMode];
+    }];
+    if (self.jsonMode) editAction.attributes = UIMenuElementAttributesDisabled;
+    UIAction *jsonAction = [UIAction actionWithTitle:(self.jsonMode ? @"Form view" : @"Raw JSON view")
+                                                image:[UIImage systemImageNamed:(self.jsonMode ? @"list.bullet" : @"curlybraces")]
+                                           identifier:nil
+                                              handler:^(__kindof UIAction *_) {
+        [weakSelf toggleJsonMode];
+    }];
+    return [UIMenu menuWithChildren:@[editAction, jsonAction]];
+}
+
+- (void)refreshMoreMenu { self.moreItem.menu = [self buildMoreMenu]; }
+
 - (void)toggleEditMode {
     self.editMode = !self.editMode;
-    self.editToggleItem.title = self.editMode ? @"Done" : @"Edit";
-    self.editToggleItem.style = self.editMode ? UIBarButtonItemStyleDone : UIBarButtonItemStylePlain;
     [self.tableView reloadData];
+    [self refreshMoreMenu];
+}
+
+- (void)toggleJsonMode {
+    self.jsonMode = !self.jsonMode;
+    if (self.jsonMode) {
+        if (!self.jsonTextView) {
+            self.jsonTextView = [[UITextView alloc] initWithFrame:self.view.bounds];
+            self.jsonTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            self.jsonTextView.editable = NO;
+            self.jsonTextView.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightRegular];
+            self.jsonTextView.backgroundColor = [UIColor systemGroupedBackgroundColor];
+            self.jsonTextView.textContainerInset = UIEdgeInsetsMake(16, 12, 16, 12);
+            self.jsonTextView.alwaysBounceVertical = YES;
+        }
+        NSData *data = [NSJSONSerialization dataWithJSONObject:self.mutableSettings ?: @{}
+                                                       options:NSJSONWritingPrettyPrinted | NSJSONWritingSortedKeys
+                                                         error:nil];
+        self.jsonTextView.text = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"{}";
+        [self.view addSubview:self.jsonTextView];
+        self.tableView.hidden = YES;
+        self.navigationItem.searchController = nil;
+    } else {
+        [self.jsonTextView removeFromSuperview];
+        self.tableView.hidden = NO;
+        self.navigationItem.searchController = self.searchController;
+    }
+    [self refreshMoreMenu];
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -322,16 +349,14 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
 @interface SCISettingsBackup ()
 + (void)showError:(NSString *)message;
 + (void)showSuccessHUD:(NSString *)message;
-+ (NSData *)decodeQRDataFromImage:(UIImage *)image;
 + (void)presentApplyConfirmationForData:(NSData *)data;
 + (void)pickFromFiles;
-+ (void)pickFromPhotos;
 + (NSArray<SCIBackupPreviewGroup *> *)buildPreviewGroupsForSettings:(NSDictionary *)values;
 @end
 
-#pragma mark - Helper singleton (delegates for pickers)
+#pragma mark - Helper singleton (document picker delegate)
 
-@interface SCIBackupHelper : NSObject <UIDocumentPickerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@interface SCIBackupHelper : NSObject <UIDocumentPickerDelegate>
 @property (nonatomic) BOOL expectingExportPick;
 @end
 
@@ -366,22 +391,6 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
     self.expectingExportPick = NO;
 }
 
-- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info {
-    UIImage *image = info[UIImagePickerControllerOriginalImage];
-    [picker dismissViewControllerAnimated:YES completion:^{
-        NSData *data = [SCISettingsBackup decodeQRDataFromImage:image];
-        if (!data) {
-            [SCISettingsBackup showError:@"No RyukGram QR code found in the selected photo."];
-            return;
-        }
-        [SCISettingsBackup presentApplyConfirmationForData:data];
-    }];
-}
-
-- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
-    [picker dismissViewControllerAnimated:YES completion:nil];
-}
-
 @end
 
 #pragma mark - SCISettingsBackup
@@ -390,9 +399,18 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
 
 #pragma mark Key discovery
 
+// Extra NSUserDefaults keys that aren't surfaced through a settings cell but
+// still need to round-trip via export/import (lists, structured data, etc.).
++ (NSArray<NSString *> *)extraDataKeys {
+    return @[
+        @"excluded_threads",
+    ];
+}
+
 + (NSSet<NSString *> *)allPrefKeys {
     NSMutableSet *keys = [NSMutableSet set];
     [self collectKeysFromSections:[SCITweakSettings sections] into:keys];
+    [keys addObjectsFromArray:[self extraDataKeys]];
     return keys;
 }
 
@@ -439,13 +457,8 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
 }
 
 + (NSData *)serializeSettings:(NSDictionary *)settings {
-    NSDictionary *wrapped = @{
-        @"app": @"RyukGram",
-        @"version": SCIVersionString ?: @"unknown",
-        @"settings": settings ?: @{}
-    };
     NSError *err = nil;
-    NSData *data = [NSJSONSerialization dataWithJSONObject:wrapped
+    NSData *data = [NSJSONSerialization dataWithJSONObject:(settings ?: @{})
                                                    options:NSJSONWritingPrettyPrinted | NSJSONWritingSortedKeys
                                                      error:&err];
     if (err) NSLog(@"[SCInsta] backup: serialize failed: %@", err);
@@ -473,37 +486,6 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
         }
     }
     [d synchronize];
-}
-
-#pragma mark QR
-
-+ (UIImage *)qrCodeForData:(NSData *)data {
-    if (!data) return nil;
-    CIFilter *filter = [CIFilter filterWithName:@"CIQRCodeGenerator"];
-    if (!filter) return nil;
-    [filter setValue:data forKey:@"inputMessage"];
-    [filter setValue:@"M" forKey:@"inputCorrectionLevel"];
-    CIImage *output = filter.outputImage;
-    if (!output) return nil;
-    output = [output imageByApplyingTransform:CGAffineTransformMakeScale(8, 8)];
-    return [UIImage imageWithCIImage:output];
-}
-
-+ (NSData *)decodeQRDataFromImage:(UIImage *)image {
-    if (!image) return nil;
-    CIImage *ci = image.CIImage;
-    if (!ci && image.CGImage) ci = [CIImage imageWithCGImage:image.CGImage];
-    if (!ci) return nil;
-    CIDetector *det = [CIDetector detectorOfType:CIDetectorTypeQRCode
-                                         context:nil
-                                         options:@{CIDetectorAccuracy: CIDetectorAccuracyHigh}];
-    NSArray *features = [det featuresInImage:ci];
-    for (CIQRCodeFeature *f in features) {
-        if ([f isKindOfClass:[CIQRCodeFeature class]] && f.messageString) {
-            return [f.messageString dataUsingEncoding:NSUTF8StringEncoding];
-        }
-    }
-    return nil;
 }
 
 #pragma mark Helpers
@@ -734,81 +716,20 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
     SCIBackupPreviewVC *vc = [[SCIBackupPreviewVC alloc] init];
     vc.title = @"Export settings";
     vc.mutableSettings = [snap mutableCopy];
-    vc.qrImage = [self qrCodeForData:[self serializeSettings:snap]];
     vc.primaryActionTitle = @"Save";
     vc.primaryAction = ^(SCIBackupPreviewVC *previewVC) {
         NSData *data = [self serializeSettings:previewVC.mutableSettings];
-        UIImage *qr = [self qrCodeForData:data];
-
-        UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Save settings"
-                                                                       message:nil
-                                                                preferredStyle:UIAlertControllerStyleActionSheet];
-        [sheet addAction:[UIAlertAction actionWithTitle:@"Save as JSON file"
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *_) {
-            NSString *fname = [NSString stringWithFormat:@"ryukgram-settings-%@.json", [self timestampString]];
-            NSURL *tmp = [[NSFileManager defaultManager].temporaryDirectory URLByAppendingPathComponent:fname];
-            NSError *err = nil;
-            [data writeToURL:tmp options:NSDataWritingAtomic error:&err];
-            if (err) { [self showError:@"Could not write temporary file."]; return; }
-            UIDocumentPickerViewController *p =
-                [[UIDocumentPickerViewController alloc] initForExportingURLs:@[tmp]];
-            SCIBackupHelper *helper = [SCIBackupHelper shared];
-            helper.expectingExportPick = YES;
-            p.delegate = helper;
-            [previewVC presentViewController:p animated:YES completion:nil];
-        }]];
-        if (qr) {
-            [sheet addAction:[UIAlertAction actionWithTitle:@"Save QR code as image"
-                                                      style:UIAlertActionStyleDefault
-                                                    handler:^(UIAlertAction *_) {
-                // Flatten CIImage-backed QR into a CGImage-backed UIImage so the share sheet can save it.
-                UIGraphicsImageRendererFormat *fmt = [UIGraphicsImageRendererFormat defaultFormat];
-                fmt.scale = 1.0;
-                CGSize sz = CGSizeMake(900, 1020);
-                UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:sz format:fmt];
-                UIImage *flat = [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
-                    [[UIColor whiteColor] setFill];
-                    [ctx fillRect:CGRectMake(0, 0, sz.width, sz.height)];
-                    NSString *title = @"RyukGram settings";
-                    NSString *subtitle = [NSString stringWithFormat:@"Scan in RyukGram → Backup & Restore → Import\n%@", SCIVersionString ?: @""];
-                    NSDictionary *titleAttrs = @{
-                        NSFontAttributeName: [UIFont systemFontOfSize:54 weight:UIFontWeightBold],
-                        NSForegroundColorAttributeName: [UIColor blackColor],
-                    };
-                    NSMutableParagraphStyle *p = [NSMutableParagraphStyle new];
-                    p.alignment = NSTextAlignmentCenter;
-                    NSDictionary *subAttrs = @{
-                        NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightRegular],
-                        NSForegroundColorAttributeName: [UIColor darkGrayColor],
-                        NSParagraphStyleAttributeName: p,
-                    };
-                    NSMutableParagraphStyle *pc = [NSMutableParagraphStyle new];
-                    pc.alignment = NSTextAlignmentCenter;
-                    NSDictionary *titleAttrsCentered = @{
-                        NSFontAttributeName: titleAttrs[NSFontAttributeName],
-                        NSForegroundColorAttributeName: titleAttrs[NSForegroundColorAttributeName],
-                        NSParagraphStyleAttributeName: pc,
-                    };
-                    [title drawInRect:CGRectMake(40, 30, sz.width - 80, 70) withAttributes:titleAttrsCentered];
-                    [subtitle drawInRect:CGRectMake(40, 100, sz.width - 80, 60) withAttributes:subAttrs];
-                    [qr drawInRect:CGRectMake(60, 180, sz.width - 120, sz.width - 120)];
-                }];
-                UIActivityViewController *share =
-                    [[UIActivityViewController alloc] initWithActivityItems:@[flat] applicationActivities:nil];
-                share.completionWithItemsHandler = ^(UIActivityType _Nullable activityType, BOOL completed, NSArray * _Nullable returnedItems, NSError * _Nullable activityError) {
-                    if (completed) [SCISettingsBackup showSuccessHUD:@"QR code saved"];
-                };
-                share.popoverPresentationController.sourceView = previewVC.view;
-                share.popoverPresentationController.sourceRect = CGRectMake(previewVC.view.bounds.size.width / 2,
-                                                                            previewVC.view.bounds.size.height / 2,
-                                                                            1, 1);
-                [previewVC presentViewController:share animated:YES completion:nil];
-            }]];
-        }
-        [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-        sheet.popoverPresentationController.barButtonItem = previewVC.navigationItem.rightBarButtonItem;
-        [previewVC presentViewController:sheet animated:YES completion:nil];
+        NSString *fname = [NSString stringWithFormat:@"ryukgram-settings-%@.json", [self timestampString]];
+        NSURL *tmp = [[NSFileManager defaultManager].temporaryDirectory URLByAppendingPathComponent:fname];
+        NSError *err = nil;
+        [data writeToURL:tmp options:NSDataWritingAtomic error:&err];
+        if (err) { [self showError:@"Could not write temporary file."]; return; }
+        UIDocumentPickerViewController *p =
+            [[UIDocumentPickerViewController alloc] initForExportingURLs:@[tmp]];
+        SCIBackupHelper *helper = [SCIBackupHelper shared];
+        helper.expectingExportPick = YES;
+        p.delegate = helper;
+        [previewVC presentViewController:p animated:YES completion:nil];
     };
 
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
@@ -819,23 +740,7 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
 #pragma mark Import
 
 + (void)presentImport {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Import settings"
-                                                                   message:@"Importing will reset all RyukGram settings to defaults and apply the imported values."
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"From Files" style:UIAlertActionStyleDefault handler:^(UIAlertAction *_) {
-        [self pickFromFiles];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"From Photos (QR code)" style:UIAlertActionStyleDefault handler:^(UIAlertAction *_) {
-        [self pickFromPhotos];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-
-    UIViewController *top = topMostController();
-    sheet.popoverPresentationController.sourceView = top.view;
-    sheet.popoverPresentationController.sourceRect = CGRectMake(top.view.bounds.size.width / 2,
-                                                                top.view.bounds.size.height / 2,
-                                                                1, 1);
-    [top presentViewController:sheet animated:YES completion:nil];
+    [self pickFromFiles];
 }
 
 + (void)pickFromFiles {
@@ -844,13 +749,6 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
                                                                 inMode:UIDocumentPickerModeImport];
     p.delegate = [SCIBackupHelper shared];
     p.allowsMultipleSelection = NO;
-    [topMostController() presentViewController:p animated:YES completion:nil];
-}
-
-+ (void)pickFromPhotos {
-    UIImagePickerController *p = [[UIImagePickerController alloc] init];
-    p.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
-    p.delegate = [SCIBackupHelper shared];
     [topMostController() presentViewController:p animated:YES completion:nil];
 }
 
@@ -864,7 +762,6 @@ typedef NS_ENUM(NSInteger, SCIBackupPreviewRowKind) {
     SCIBackupPreviewVC *vc = [[SCIBackupPreviewVC alloc] init];
     vc.title = @"Import preview";
     vc.mutableSettings = [settings mutableCopy];
-    vc.qrImage = nil;
     vc.primaryActionTitle = @"Apply";
     vc.primaryAction = ^(SCIBackupPreviewVC *previewVC) {
         UIAlertController *confirm =
