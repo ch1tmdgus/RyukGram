@@ -114,6 +114,8 @@
     UIViewController *rootController = [window rootViewController];
     SCISettingsViewController *settingsViewController = [SCISettingsViewController new];
     UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:settingsViewController];
+    if ([SCIUtils getBoolPref:@"settings_pause_playback"])
+        navigationController.modalPresentationStyle = UIModalPresentationFullScreen;
 
     [rootController presentViewController:navigationController animated:YES completion:nil];
 }
@@ -124,6 +126,8 @@
     while (rootController.presentedViewController) rootController = rootController.presentedViewController;
     SCISettingsViewController *root = [SCISettingsViewController new];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:root];
+    if ([SCIUtils getBoolPref:@"settings_pause_playback"])
+        nav.modalPresentationStyle = UIModalPresentationFullScreen;
 
     NSArray *targetNavSections = nil;
     for (NSDictionary *section in [SCITweakSettings sections]) {

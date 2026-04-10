@@ -174,11 +174,15 @@ void sciRefreshAllVisibleOverlays(UIViewController *storyVC) {
     if (!overlayCls) overlayCls = NSClassFromString(@"IGStoryFullscreenOverlayMetalLayerView");
     if (!overlayCls) return;
     SEL refreshSel = @selector(sciRefreshSeenButton);
+    SEL audioSel = @selector(sciRefreshAudioButton);
     NSMutableArray *stack = [NSMutableArray arrayWithObject:storyVC.view];
     while (stack.count) {
         UIView *v = stack.lastObject; [stack removeLastObject];
-        if ([v isKindOfClass:overlayCls] && [v respondsToSelector:refreshSel]) {
-            ((void(*)(id, SEL))objc_msgSend)(v, refreshSel);
+        if ([v isKindOfClass:overlayCls]) {
+            if ([v respondsToSelector:refreshSel])
+                ((void(*)(id, SEL))objc_msgSend)(v, refreshSel);
+            if ([v respondsToSelector:audioSel])
+                ((void(*)(id, SEL))objc_msgSend)(v, audioSel);
         }
         for (UIView *sub in v.subviews) [stack addObject:sub];
     }

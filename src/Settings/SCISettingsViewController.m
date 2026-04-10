@@ -78,7 +78,15 @@ static char rowStaticRef[] = "row";
         self.navigationItem.searchController = sc;
         self.navigationItem.hidesSearchBarWhenScrolling = NO;
         self.searchController = sc;
+
+        self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc]
+            initWithBarButtonSystemItem:UIBarButtonSystemItemClose
+                                 target:self action:@selector(sciDismissSettings)];
     }
+}
+
+- (void)sciDismissSettings {
+    [self dismissViewControllerAnimated:YES completion:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {

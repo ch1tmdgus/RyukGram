@@ -14,6 +14,10 @@ extern "C" BOOL sciStorySeenToggleEnabled;
 extern "C" void sciRefreshAllVisibleOverlays(UIViewController *storyVC);
 extern "C" void sciTriggerStoryMarkSeen(UIViewController *storyVC);
 extern "C" __weak UIViewController *sciActiveStoryViewerVC;
+extern "C" void sciToggleStoryAudio(void);
+extern "C" BOOL sciIsStoryAudioEnabled(void);
+extern "C" void sciInitStoryAudioState(void);
+extern "C" void sciResetStoryAudioState(void);
 
 static SCIDownloadDelegate *sciStoryVideoDl = nil;
 static SCIDownloadDelegate *sciStoryImageDl = nil;
@@ -131,6 +135,29 @@ static void sciDownloadDMVisualMessage(UIViewController *dmVC) {
         ]];
     }
 
+    // Audio toggle button (left side, small)
+    sciInitStoryAudioState();
+    if ([SCIUtils getBoolPref:@"story_audio_toggle"] && ![self viewWithTag:1341]) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+        btn.tag = 1341;
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightSemibold];
+        NSString *icon = sciIsStoryAudioEnabled() ? @"speaker.wave.2" : @"speaker.slash";
+        [btn setImage:[UIImage systemImageNamed:icon withConfiguration:cfg] forState:UIControlStateNormal];
+        btn.tintColor = [UIColor whiteColor];
+        btn.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.4];
+        btn.layer.cornerRadius = 14;
+        btn.clipsToBounds = YES;
+        btn.translatesAutoresizingMaskIntoConstraints = NO;
+        [btn addTarget:self action:@selector(sciAudioToggleTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [self addSubview:btn];
+        [NSLayoutConstraint activateConstraints:@[
+            [btn.bottomAnchor constraintEqualToAnchor:self.safeAreaLayoutGuide.bottomAnchor constant:-100],
+            [btn.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
+            [btn.widthAnchor constraintEqualToConstant:28],
+            [btn.heightAnchor constraintEqualToConstant:28]
+        ]];
+    }
+
     // Seen button — deferred so the responder chain is wired up
     __weak UIView *weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -140,6 +167,15 @@ static void sciDownloadDMVisualMessage(UIViewController *dmVC) {
 }
 
 // ============ Seen button lifecycle ============
+
+// Refresh the audio toggle icon (tag 1341) to match current state.
+%new - (void)sciRefreshAudioButton {
+    UIButton *btn = (UIButton *)[self viewWithTag:1341];
+    if (!btn) return;
+    UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightSemibold];
+    NSString *icon = sciIsStoryAudioEnabled() ? @"speaker.wave.2" : @"speaker.slash";
+    [btn setImage:[UIImage systemImageNamed:icon withConfiguration:cfg] forState:UIControlStateNormal];
+}
 
 // Rebuilds the eye button (tag 1339) based on current owner + prefs. Idempotent.
 %new - (void)sciRefreshSeenButton {
@@ -192,11 +228,11 @@ static void sciDownloadDMVisualMessage(UIViewController *dmVC) {
     lp.minimumPressDuration = 0.4;
     [btn addGestureRecognizer:lp];
     [self addSubview:btn];
-    UIView *dlBtn = [self viewWithTag:1340];
-    if (dlBtn) {
+    UIView *anchor = [self viewWithTag:1340];
+    if (anchor) {
         [NSLayoutConstraint activateConstraints:@[
-            [btn.centerYAnchor constraintEqualToAnchor:dlBtn.centerYAnchor],
-            [btn.trailingAnchor constraintEqualToAnchor:dlBtn.leadingAnchor constant:-10],
+            [btn.centerYAnchor constraintEqualToAnchor:anchor.centerYAnchor],
+            [btn.trailingAnchor constraintEqualToAnchor:anchor.leadingAnchor constant:-10],
             [btn.widthAnchor constraintEqualToConstant:36],
             [btn.heightAnchor constraintEqualToConstant:36]
         ]];
@@ -210,12 +246,26 @@ static void sciDownloadDMVisualMessage(UIViewController *dmVC) {
     }
 }
 
-// Refresh when story owner changes (overlay reuse across reels)
+// Refresh when story owner changes or audio state changes
 - (void)layoutSubviews {
     %orig;
-    if (![SCIUtils getBoolPref:@"no_seen_receipt"]) return;
     static char kLastPKKey;
     static char kLastExclKey;
+    static char kLastAudioKey;
+
+    // Audio button: check if state changed
+    UIButton *audioBtn = (UIButton *)[self viewWithTag:1341];
+    if (audioBtn) {
+        BOOL audioOn = sciIsStoryAudioEnabled();
+        NSNumber *prevAudio = objc_getAssociatedObject(self, &kLastAudioKey);
+        if (!prevAudio || [prevAudio boolValue] != audioOn) {
+            objc_setAssociatedObject(self, &kLastAudioKey, @(audioOn), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            ((void(*)(id, SEL))objc_msgSend)(self, @selector(sciRefreshAudioButton));
+        }
+    }
+
+    // Seen button: check if owner/exclusion changed
+    if (![SCIUtils getBoolPref:@"no_seen_receipt"]) return;
     NSDictionary *info = sciOwnerInfoForView(self);
     NSString *pk = info[@"pk"] ?: @"";
     BOOL excluded = pk.length && [SCIExcludedStoryUsers isUserPKExcluded:pk];
@@ -226,6 +276,17 @@ static void sciDownloadDMVisualMessage(UIViewController *dmVC) {
     objc_setAssociatedObject(self, &kLastPKKey, pk, OBJC_ASSOCIATION_COPY_NONATOMIC);
     objc_setAssociatedObject(self, &kLastExclKey, @(excluded), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     ((void(*)(id, SEL))objc_msgSend)(self, @selector(sciRefreshSeenButton));
+}
+
+// ============ Audio toggle handler ============
+
+%new - (void)sciAudioToggleTapped:(UIButton *)sender {
+    UIImpactFeedbackGenerator *haptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [haptic impactOccurred];
+    sciToggleStoryAudio();
+    UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightSemibold];
+    NSString *icon = sciIsStoryAudioEnabled() ? @"speaker.wave.2" : @"speaker.slash";
+    [sender setImage:[UIImage systemImageNamed:icon withConfiguration:cfg] forState:UIControlStateNormal];
 }
 
 // ============ Download handler ============
@@ -471,10 +532,12 @@ static void sciSyncStoryButtonsAlpha(UIView *self_, CGFloat alpha) {
     while (cur) {
         for (UIView *sib in cur.superview.subviews) {
             if (![sib isKindOfClass:overlayCls]) continue;
-            UIView *seen = [sib viewWithTag:1339];
-            UIView *dl   = [sib viewWithTag:1340];
-            if (seen) seen.alpha = alpha;
-            if (dl)   dl.alpha   = alpha;
+            UIView *seen  = [sib viewWithTag:1339];
+            UIView *dl    = [sib viewWithTag:1340];
+            UIView *audio = [sib viewWithTag:1341];
+            if (seen)  seen.alpha  = alpha;
+            if (dl)    dl.alpha    = alpha;
+            if (audio) audio.alpha = alpha;
             return;
         }
         cur = cur.superview;

@@ -44,7 +44,8 @@ BOOL dmVisualMsgsViewedButtonEnabled = false;
         @"swipe_nav_tabs": @"default",
         @"enable_notes_customization": @(YES),
         @"custom_note_themes": @(YES),
-        @"disable_auto_unmuting_reels": @(YES),
+        @"disable_auto_unmuting_reels": @(NO),
+        @"settings_shortcut": @(YES),
         @"doom_scrolling_reel_count": @(1),
         @"no_seen_visual": @(YES),
         @"send_audio_as_file": @(YES),
@@ -64,7 +65,9 @@ BOOL dmVisualMsgsViewedButtonEnabled = false;
         @"unexclude_inbox_button": @(YES),
         @"enable_story_user_exclusions": @(YES),
         @"story_excluded_show_unexclude_eye": @(YES),
-        @"story_seen_mode": @"button"
+        @"story_seen_mode": @"button",
+        @"story_audio_toggle": @(NO),
+        @"settings_pause_playback": @(YES)
     };
     [[NSUserDefaults standardUserDefaults] registerDefaults:sciDefaults];
     
@@ -615,7 +618,9 @@ shouldPersistLastBugReportId:(id)arg6
     }
 
     extern NSArray *sciMaybeAppendStoryExcludeMenuItem(NSArray *);
+    extern NSArray *sciMaybeAppendStoryAudioMenuItem(NSArray *);
     NSArray *finalObjs = sciMaybeAppendStoryExcludeMenuItem([filteredObjs copy]);
+    finalObjs = sciMaybeAppendStoryAudioMenuItem(finalObjs);
     return %orig(finalObjs, edr, headerLabelText);
 }
 %end

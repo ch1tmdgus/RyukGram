@@ -101,6 +101,7 @@ A feature-rich iOS tweak for Instagram, forked from [SCInsta](https://github.com
 - Manual mark story as seen — button on story overlay to selectively mark stories as seen (button or toggle mode) **\***
 - Long-press the story seen button for quick actions **\***
 - Per-user story seen-receipt exclusions — exclude specific users so their stories behave normally. Manage via 3-dot menu, eye button long-press, or settings list **\***
+- Story audio mute/unmute toggle — button on the story overlay and 3-dot menu to toggle audio **\***
 - Stop story auto-advance — stories won't auto-skip when the timer ends **\***
 - Story download button — download directly from the story overlay **\***
 - Download disappearing DM media (photos + videos) **\***
@@ -132,6 +133,8 @@ A feature-rich iOS tweak for Instagram, forked from [SCInsta](https://github.com
 
 ### Tweak settings **\***
 - Search bar in the main settings page — recursively finds any setting across nested pages with a breadcrumb to its location
+- Pause playback when opening settings (toggleable) **\***
+- Quick-access via long-press on feed tab **\***
 
 ### Backup & Restore **\***
 - Export RyukGram settings as a JSON file

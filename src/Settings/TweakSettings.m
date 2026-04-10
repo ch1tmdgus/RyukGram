@@ -188,6 +188,12 @@
                                             ]
                                         },
                                         @{
+                                            @"header": @"Audio",
+                                            @"rows": @[
+                                                [SCISetting switchCellWithTitle:@"Story audio toggle" subtitle:@"Adds a speaker button to the story overlay to unmute/mute audio. Also available in the 3-dot menu" defaultsKey:@"story_audio_toggle"],
+                                            ]
+                                        },
+                                        @{
                                             @"header": @"Other",
                                             @"rows": @[
                                                 [SCISetting switchCellWithTitle:@"Disable instants creation" subtitle:@"Hides the functionality to create/send instants" defaultsKey:@"disable_instants_creation" requiresRestart:YES]
@@ -361,33 +367,38 @@
                 //                         }
                 //                         ]
                 // ],
+                [SCISetting navigationCellWithTitle:@"Advanced"
+                                           subtitle:@""
+                                               icon:[SCISymbol symbolWithName:@"gearshape.2"]
+                                        navSections:@[@{
+                                            @"header": @"Settings",
+                                            @"rows": @[
+                                                [SCISetting switchCellWithTitle:@"Enable tweak settings quick-access" subtitle:@"Hold on the home tab to open RyukGram settings" defaultsKey:@"settings_shortcut" requiresRestart:YES],
+                                                [SCISetting switchCellWithTitle:@"Show tweak settings on app launch" subtitle:@"Automatically opens settings when the app launches" defaultsKey:@"tweak_settings_app_launch"],
+                                                [SCISetting switchCellWithTitle:@"Pause playback when opening settings" subtitle:@"Pauses any playing video/audio when settings opens" defaultsKey:@"settings_pause_playback"],
+                                            ]
+                                        },
+                                        @{
+                                            @"header": @"Instagram",
+                                            @"rows": @[
+                                                [SCISetting switchCellWithTitle:@"Disable safe mode" subtitle:@"Prevents Instagram from resetting settings after crashes (at your own risk)" defaultsKey:@"disable_safe_mode"],
+                                                [SCISetting buttonCellWithTitle:@"Reset onboarding state"
+                                                                           subtitle:@""
+                                                                               icon:nil
+                                                                             action:^(void) { [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"SCInstaFirstRun"]; [SCIUtils showRestartConfirmation];}
+                                                ],
+                                            ]
+                                        }]
+                ],
                 [SCISetting navigationCellWithTitle:@"Debug"
                                            subtitle:@""
                                                icon:[SCISymbol symbolWithName:@"ladybug"]
                                         navSections:@[@{
                                             @"header": @"FLEX",
                                             @"rows": @[
-                                                [SCISetting switchCellWithTitle:@"Enable FLEX gesture" subtitle:@"Allows you to hold 5 fingers on the screen to open the FLEX explorer" defaultsKey:@"flex_instagram"],
-                                                [SCISetting switchCellWithTitle:@"Open FLEX on app launch" subtitle:@"Automatically opens the FLEX explorer when the app launches" defaultsKey:@"flex_app_launch"],
-                                                [SCISetting switchCellWithTitle:@"Open FLEX on app focus" subtitle:@"Automatically opens the FLEX explorer when the app is focused" defaultsKey:@"flex_app_start"]
-                                            ]
-                                        },
-                                        @{
-                                            @"header": @"RyukGram",
-                                            @"rows": @[
-                                                [SCISetting switchCellWithTitle:@"Enable tweak settings quick-access" subtitle:@"Allows you to hold on the home tab to open the RyukGram settings" defaultsKey:@"settings_shortcut" requiresRestart:YES],
-                                                [SCISetting switchCellWithTitle:@"Show tweak settings on app launch" subtitle:@"Automatically opens the RyukGram settings when the app launches" defaultsKey:@"tweak_settings_app_launch"],
-                                                [SCISetting buttonCellWithTitle:@"Reset onboarding completion state"
-                                                                           subtitle:@""
-                                                                               icon:nil
-                                                                             action:^(void) { [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"SCInstaFirstRun"]; [SCIUtils showRestartConfirmation];}
-                                                ],
-                                            ]
-                                        },
-                                        @{
-                                            @"header": @"Instagram",
-                                            @"rows": @[
-                                                [SCISetting switchCellWithTitle:@"Disable safe mode" subtitle:@"Makes Instagram not reset settings after subsequent crashes (at your own risk)" defaultsKey:@"disable_safe_mode"]
+                                                [SCISetting switchCellWithTitle:@"Enable FLEX gesture" subtitle:@"Hold 5 fingers on the screen to open FLEX" defaultsKey:@"flex_instagram"],
+                                                [SCISetting switchCellWithTitle:@"Open FLEX on app launch" subtitle:@"Opens FLEX when the app launches" defaultsKey:@"flex_app_launch"],
+                                                [SCISetting switchCellWithTitle:@"Open FLEX on app focus" subtitle:@"Opens FLEX when the app is focused" defaultsKey:@"flex_app_start"]
                                             ]
                                         },
                                         @{

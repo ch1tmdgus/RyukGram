@@ -67,15 +67,16 @@
     }
 }
 - (void)_muteSwitchStateChanged:(id)changed {
-    if (![SCIUtils getBoolPref:@"disable_auto_unmuting_reels"]) {
+    extern BOOL sciStoryAudioBypass;
+    if (sciStoryAudioBypass || ![SCIUtils getBoolPref:@"disable_auto_unmuting_reels"]) {
         %orig(changed);
     }
 }
 // Block the announcer from broadcasting "audio enabled" state changes
 - (void)_announceForDeviceStateChangesIfNeededForAudioEnabled:(BOOL)enabled reason:(NSInteger)reason {
-    // When pause/play mode is on, allow unmute (our force-unmute needs this path)
+    extern BOOL sciStoryAudioBypass;
     BOOL pausePlayMode = [[SCIUtils getStringPref:@"reels_tap_control"] isEqualToString:@"pause"];
-    if ([SCIUtils getBoolPref:@"disable_auto_unmuting_reels"] && enabled && !pausePlayMode) {
+    if ([SCIUtils getBoolPref:@"disable_auto_unmuting_reels"] && enabled && !pausePlayMode && !sciStoryAudioBypass) {
         return;
     }
     %orig;
